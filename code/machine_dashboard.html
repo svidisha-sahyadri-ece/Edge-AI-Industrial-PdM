@@ -1,0 +1,883 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Machine Monitor</title>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg: #080d14;
+    --bg2: #0d1520;
+    --bg3: #111c2b;
+    --panel: #0f1a27;
+    --border: rgba(56,189,248,0.15);
+    --border2: rgba(56,189,248,0.35);
+    --accent: #38bdf8;
+    --accent2: #0ea5e9;
+    --green: #22d3a5;
+    --amber: #fbbf24;
+    --red: #f87171;
+    --purple: #a78bfa;
+    --text: #e2f0ff;
+    --text2: #7ea8c9;
+    --text3: #3d6e8f;
+    --mono: 'Courier New', 'Lucida Console', monospace;
+    --sans: 'Trebuchet MS', 'Segoe UI', sans-serif;
+  }
+
+  html, body {
+    height: 100%;
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--sans);
+    overflow-x: hidden;
+  }
+
+  /* ===================== SCANLINE OVERLAY ===================== */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background: repeating-linear-gradient(
+      to bottom,
+      transparent 0px,
+      transparent 3px,
+      rgba(0,0,0,0.06) 3px,
+      rgba(0,0,0,0.06) 4px
+    );
+    pointer-events: none;
+    z-index: 9999;
+  }
+
+  /* ===================== LOGIN PAGE ===================== */
+  #login-page {
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+    overflow: hidden;
+  }
+
+  #login-page::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background:
+      radial-gradient(ellipse 80% 60% at 50% 20%, rgba(56,189,248,0.07) 0%, transparent 70%),
+      radial-gradient(ellipse 40% 40% at 80% 80%, rgba(167,139,250,0.05) 0%, transparent 60%);
+  }
+
+  .grid-bg {
+    position: absolute;
+    inset: 0;
+    background-image:
+      linear-gradient(rgba(56,189,248,0.05) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(56,189,248,0.05) 1px, transparent 1px);
+    background-size: 40px 40px;
+    animation: gridShift 20s linear infinite;
+  }
+  @keyframes gridShift { from{background-position:0 0} to{background-position:40px 40px} }
+
+  .login-box {
+    position: relative;
+    z-index: 1;
+    width: 380px;
+    max-width: 94vw;
+    background: rgba(13,21,32,0.92);
+    border: 1px solid var(--border2);
+    border-radius: 4px;
+    padding: 40px 36px 36px;
+    animation: loginIn 0.6s ease both;
+  }
+  @keyframes loginIn { from{opacity:0;transform:translateY(24px)} to{opacity:1;transform:translateY(0)} }
+
+  .login-logo {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 32px;
+  }
+  .logo-icon {
+    width: 38px; height: 38px;
+    border: 1.5px solid var(--accent);
+    border-radius: 2px;
+    display: flex; align-items: center; justify-content: center;
+    position: relative;
+  }
+  .logo-icon::after {
+    content: '';
+    position: absolute;
+    inset: 4px;
+    border: 1px solid rgba(56,189,248,0.4);
+    border-radius: 1px;
+    animation: logoPulse 2s ease-in-out infinite;
+  }
+  @keyframes logoPulse { 0%,100%{opacity:0.4} 50%{opacity:1} }
+  .logo-bolt {
+    width: 14px; height: 20px;
+    background: var(--accent);
+    clip-path: polygon(60% 0%, 20% 52%, 55% 52%, 40% 100%, 80% 48%, 45% 48%);
+  }
+  .logo-text { font-family: var(--mono); font-size: 15px; color: var(--accent); letter-spacing: 0.12em; }
+  .logo-sub { font-size: 10px; color: var(--text3); letter-spacing: 0.15em; text-transform: uppercase; margin-top: 2px; }
+
+  .login-title { font-size: 11px; color: var(--text3); letter-spacing: 0.18em; text-transform: uppercase; margin-bottom: 24px; font-family: var(--mono); }
+
+  .field { margin-bottom: 18px; }
+  .field label { display: block; font-size: 10px; color: var(--text3); letter-spacing: 0.14em; text-transform: uppercase; font-family: var(--mono); margin-bottom: 8px; }
+  .field input {
+    width: 100%;
+    background: rgba(56,189,248,0.04);
+    border: 1px solid var(--border);
+    border-radius: 2px;
+    padding: 10px 14px;
+    font-family: var(--mono);
+    font-size: 13px;
+    color: var(--text);
+    outline: none;
+    transition: border-color 0.2s, box-shadow 0.2s;
+    letter-spacing: 0.05em;
+  }
+  .field input:focus {
+    border-color: var(--accent2);
+    box-shadow: 0 0 0 3px rgba(56,189,248,0.1);
+  }
+  .field input::placeholder { color: var(--text3); }
+
+  .login-btn {
+    width: 100%;
+    margin-top: 8px;
+    background: transparent;
+    border: 1px solid var(--accent);
+    color: var(--accent);
+    font-family: var(--mono);
+    font-size: 12px;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    padding: 12px;
+    cursor: pointer;
+    border-radius: 2px;
+    position: relative;
+    overflow: hidden;
+    transition: color 0.25s, background 0.25s;
+  }
+  .login-btn::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: var(--accent);
+    transform: translateX(-101%);
+    transition: transform 0.25s ease;
+  }
+  .login-btn:hover::before { transform: translateX(0); }
+  .login-btn:hover { color: var(--bg); }
+  .login-btn span { position: relative; z-index: 1; }
+
+  .login-error {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--red);
+    margin-top: 12px;
+    text-align: center;
+    min-height: 18px;
+    letter-spacing: 0.08em;
+  }
+
+  .login-hint {
+    margin-top: 24px;
+    padding-top: 18px;
+    border-top: 1px solid var(--border);
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--text3);
+    letter-spacing: 0.1em;
+  }
+  .login-hint span { color: var(--accent2); }
+
+  /* ===================== DASHBOARD PAGE ===================== */
+  #dashboard-page { display: none; flex-direction: column; min-height: 100vh; }
+
+  /* TOP BAR */
+  .topbar {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 0 28px;
+    height: 54px;
+    background: rgba(13,21,32,0.95);
+    border-bottom: 1px solid var(--border);
+    position: sticky; top: 0; z-index: 100;
+    gap: 16px;
+    flex-wrap: wrap;
+  }
+  .topbar-left { display: flex; align-items: center; gap: 16px; }
+  .topbar-logo { font-family: var(--mono); font-size: 13px; color: var(--accent); letter-spacing: 0.14em; }
+  .topbar-divider { width: 1px; height: 20px; background: var(--border); }
+  .topbar-machine { font-size: 11px; color: var(--text2); font-family: var(--mono); letter-spacing: 0.08em; }
+  .live-badge {
+    display: flex; align-items: center; gap: 6px;
+    font-family: var(--mono); font-size: 10px; color: var(--green);
+    letter-spacing: 0.12em;
+    border: 1px solid rgba(34,211,165,0.3);
+    padding: 3px 10px; border-radius: 2px;
+  }
+  .live-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--green); animation: pulse 1.4s infinite; }
+  @keyframes pulse { 0%,100%{opacity:1}50%{opacity:0.2} }
+  .topbar-right { display: flex; align-items: center; gap: 14px; }
+  .topbar-time { font-family: var(--mono); font-size: 12px; color: var(--text3); letter-spacing: 0.1em; }
+  .logout-btn {
+    background: transparent;
+    border: 1px solid var(--border2);
+    color: var(--text2);
+    font-family: var(--mono);
+    font-size: 10px;
+    letter-spacing: 0.14em;
+    padding: 5px 12px;
+    cursor: pointer;
+    border-radius: 2px;
+    transition: border-color 0.2s, color 0.2s;
+  }
+  .logout-btn:hover { border-color: var(--red); color: var(--red); }
+
+  /* NAV TABS */
+  .nav-bar {
+    display: flex; align-items: center; gap: 0;
+    padding: 0 28px;
+    background: var(--bg2);
+    border-bottom: 1px solid var(--border);
+    overflow-x: auto;
+  }
+  .nav-tab {
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    padding: 13px 22px;
+    border-bottom: 2px solid transparent;
+    cursor: pointer;
+    color: var(--text3);
+    white-space: nowrap;
+    transition: color 0.18s, border-color 0.18s;
+    background: transparent;
+    border-top: none; border-left: none; border-right: none;
+  }
+  .nav-tab:hover { color: var(--text2); }
+  .nav-tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+
+  /* MAIN CONTENT */
+  .main { flex: 1; padding: 24px 28px; max-width: 1200px; width: 100%; margin: 0 auto; }
+
+  /* PAGES */
+  .page { display: none; animation: fadeIn 0.3s ease; }
+  .page.visible { display: block; }
+  @keyframes fadeIn { from{opacity:0;transform:translateY(6px)} to{opacity:1;transform:translateY(0)} }
+
+  /* METRIC CARDS */
+  .metric-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px,1fr)); gap: 10px; margin-bottom: 20px; }
+  .mc {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 14px 16px;
+    position: relative;
+    overflow: hidden;
+  }
+  .mc::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 2px;
+    background: var(--accent);
+    opacity: 0.4;
+  }
+  .mc.ok::before { background: var(--green); opacity: 0.7; }
+  .mc.warn::before { background: var(--amber); opacity: 0.7; }
+  .mc.fault::before { background: var(--red); opacity: 0.9; }
+  .mc-label { font-family: var(--mono); font-size: 9px; color: var(--text3); letter-spacing: 0.18em; text-transform: uppercase; margin-bottom: 8px; }
+  .mc-val { font-family: var(--mono); font-size: 20px; font-weight: 600; color: var(--text); }
+  .mc-val.ok { color: var(--green); }
+  .mc-val.warn { color: var(--amber); }
+  .mc-val.fault { color: var(--red); }
+
+  /* CHART CARDS */
+  .chart-row { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 16px; }
+  @media (max-width: 620px) { .chart-row { grid-template-columns: 1fr; } }
+  .cc {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 18px;
+  }
+  .cc-title { font-family: var(--mono); font-size: 9px; color: var(--text3); letter-spacing: 0.18em; text-transform: uppercase; margin-bottom: 14px; }
+
+  /* SECTION ACCORDION */
+  .accord { background: var(--panel); border: 1px solid var(--border); border-radius: 4px; margin-bottom: 14px; overflow: hidden; }
+  .accord-head {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 14px 18px;
+    cursor: pointer;
+    transition: background 0.15s;
+  }
+  .accord-head:hover { background: rgba(56,189,248,0.04); }
+  .accord-left { display: flex; align-items: center; gap: 12px; }
+  .ah-name { font-family: var(--mono); font-size: 12px; color: var(--text); letter-spacing: 0.08em; }
+  .badge { font-family: var(--mono); font-size: 9px; padding: 2px 8px; border-radius: 2px; letter-spacing: 0.12em; }
+  .badge-ok { background: rgba(34,211,165,0.12); color: var(--green); border: 1px solid rgba(34,211,165,0.25); }
+  .badge-warn { background: rgba(251,191,36,0.12); color: var(--amber); border: 1px solid rgba(251,191,36,0.25); }
+  .badge-fault { background: rgba(248,113,113,0.12); color: var(--red); border: 1px solid rgba(248,113,113,0.25); }
+  .accord-arrow { font-size: 11px; color: var(--text3); transition: transform 0.25s; user-select: none; }
+  .accord-arrow.open { transform: rotate(180deg); }
+  .accord-body { display: none; padding: 0 18px 18px; border-top: 1px solid var(--border); padding-top: 16px; }
+  .accord-body.open { display: block; }
+
+  /* PROGRESS BARS */
+  .prog-row { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+  .prog-name { font-family: var(--mono); font-size: 11px; color: var(--text2); width: 130px; flex-shrink: 0; }
+  .prog-track { flex: 1; height: 5px; background: rgba(56,189,248,0.08); border-radius: 2px; overflow: hidden; }
+  .prog-fill { height: 100%; border-radius: 2px; transition: width 0.7s ease; }
+  .prog-val { font-family: var(--mono); font-size: 11px; color: var(--text2); width: 36px; text-align: right; }
+
+  /* LEGEND */
+  .legend { display: flex; flex-wrap: wrap; gap: 12px; margin-bottom: 12px; }
+  .leg-item { display: flex; align-items: center; gap: 5px; font-family: var(--mono); font-size: 10px; color: var(--text2); }
+  .leg-sq { width: 9px; height: 9px; border-radius: 1px; }
+
+  /* EVENT LOG */
+  .log-table { width: 100%; border-collapse: collapse; font-family: var(--mono); font-size: 11px; }
+  .log-table th { color: var(--text3); text-align: left; padding: 8px 12px; letter-spacing: 0.12em; font-weight: 400; border-bottom: 1px solid var(--border); font-size: 9px; text-transform: uppercase; }
+  .log-table td { padding: 9px 12px; border-bottom: 1px solid rgba(56,189,248,0.06); color: var(--text2); vertical-align: middle; }
+  .log-table tr:last-child td { border-bottom: none; }
+  .log-table tr:hover td { background: rgba(56,189,248,0.03); }
+  .tag { font-size: 9px; padding: 2px 7px; border-radius: 2px; letter-spacing: 0.1em; }
+  .tag-info { background: rgba(56,189,248,0.12); color: var(--accent); }
+  .tag-warn { background: rgba(251,191,36,0.12); color: var(--amber); }
+  .tag-fault { background: rgba(248,113,113,0.12); color: var(--red); }
+
+  /* STATUS INDICATOR RING */
+  .status-ring-wrap { display: flex; align-items: center; justify-content: center; padding: 10px 0 4px; }
+
+  /* SECTION STATUS DOT */
+  .sdot { width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0; }
+
+  /* FULL-WIDTH CHART CARD */
+  .cc-full { background: var(--panel); border: 1px solid var(--border); border-radius: 4px; padding: 18px; margin-bottom: 14px; }
+
+  /* SCROLLBAR */
+  ::-webkit-scrollbar { width: 5px; height: 5px; }
+  ::-webkit-scrollbar-track { background: var(--bg2); }
+  ::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 3px; }
+
+  /* CHART DEFAULTS */
+  canvas { display: block; }
+</style>
+</head>
+<body>
+
+<!-- ==================== LOGIN PAGE ==================== -->
+<div id="login-page">
+  <div class="grid-bg"></div>
+  <div class="login-box">
+    <div class="login-logo">
+      <div class="logo-icon"><div class="logo-bolt"></div></div>
+      <div>
+        <div class="logo-text">MACHMON</div>
+        <div class="logo-sub">Industrial Monitoring System</div>
+      </div>
+    </div>
+    <div class="login-title">// Operator Authentication</div>
+    <div class="field">
+      <label>User ID</label>
+      <input type="text" id="login-user" placeholder="operator@plant" autocomplete="off"/>
+    </div>
+    <div class="field">
+      <label>Access Key</label>
+      <input type="password" id="login-pass" placeholder="••••••••" autocomplete="off"/>
+    </div>
+    <button class="login-btn" onclick="doLogin()"><span>&#x25B6;&nbsp; Authenticate</span></button>
+    <div class="login-error" id="login-err"></div>
+    <div class="login-hint">
+      Demo credentials — user: <span>admin</span> &nbsp;/&nbsp; key: <span>1234</span>
+    </div>
+  </div>
+</div>
+
+<!-- ==================== DASHBOARD PAGE ==================== -->
+<div id="dashboard-page">
+  <div class="topbar">
+    <div class="topbar-left">
+      <div class="topbar-logo">&#9889; MACHMON</div>
+      <div class="topbar-divider"></div>
+      <div class="topbar-machine">Unit: <span style="color:var(--accent)">MCH-04 &mdash; Line B</span></div>
+      <div class="live-badge"><span class="live-dot"></span>LIVE</div>
+    </div>
+    <div class="topbar-right">
+      <div class="topbar-time" id="clock">00:00:00</div>
+      <button class="logout-btn" onclick="doLogout()">&#x23FB; LOGOUT</button>
+    </div>
+  </div>
+
+  <div class="nav-bar">
+    <button class="nav-tab active" onclick="switchPage('overview',this)">Overview</button>
+    <button class="nav-tab" onclick="switchPage('bearing',this)">Bearing</button>
+    <button class="nav-tab" onclick="switchPage('thermal',this)">Thermal</button>
+    <button class="nav-tab" onclick="switchPage('electrical',this)">Electrical</button>
+    <button class="nav-tab" onclick="switchPage('mechanical',this)">Mechanical</button>
+    <button class="nav-tab" onclick="switchPage('log',this)">Event Log</button>
+  </div>
+
+  <div class="main">
+
+    <!-- OVERVIEW -->
+    <div class="page visible" id="page-overview">
+      <div class="metric-row">
+        <div class="mc ok"><div class="mc-label">Machine Status</div><div class="mc-val ok" id="ov-status">HEALTHY</div></div>
+        <div class="mc ok"><div class="mc-label">Overall Health</div><div class="mc-val ok" id="ov-health">92.0%</div></div>
+        <div class="mc"><div class="mc-label">MSE</div><div class="mc-val" id="ov-mse">0.031</div></div>
+        <div class="mc ok"><div class="mc-label">Confidence</div><div class="mc-val ok" id="ov-conf">97.4%</div></div>
+        <div class="mc ok"><div class="mc-label">RUL</div><div class="mc-val ok" id="ov-rul">88%</div></div>
+        <div class="mc"><div class="mc-label">Active Warnings</div><div class="mc-val warn" id="ov-warns">2</div></div>
+      </div>
+
+      <div class="chart-row">
+        <div class="cc">
+          <div class="cc-title">Subsystem health — distribution</div>
+          <div class="legend" id="pie-legend"></div>
+          <div style="position:relative;width:100%;height:190px;">
+            <canvas id="pieChart" role="img" aria-label="Doughnut chart of subsystem health scores">Bearing 91%, Thermal 88%, Electrical 95%, Mechanical 87%</canvas>
+          </div>
+        </div>
+        <div class="cc">
+          <div class="cc-title">Health trend — last 20 ticks</div>
+          <div style="position:relative;width:100%;height:210px;">
+            <canvas id="lineChart" role="img" aria-label="Line chart of overall health over time"></canvas>
+          </div>
+        </div>
+      </div>
+
+      <div class="cc-full">
+        <div class="cc-title">Subsystem comparison — health scores</div>
+        <div style="position:relative;width:100%;height:160px;">
+          <canvas id="barChart" role="img" aria-label="Bar chart comparing health scores for four subsystems"></canvas>
+        </div>
+      </div>
+    </div>
+
+    <!-- BEARING -->
+    <div class="page" id="page-bearing">
+      <div class="metric-row">
+        <div class="mc ok"><div class="mc-label">Health</div><div class="mc-val ok" id="b-health">91%</div></div>
+        <div class="mc"><div class="mc-label">Vibration</div><div class="mc-val" id="b-vib">1.40 mm/s</div></div>
+        <div class="mc"><div class="mc-label">Freq. deviation</div><div class="mc-val" id="b-freq">+2.1 Hz</div></div>
+        <div class="mc ok"><div class="mc-label">RMS noise</div><div class="mc-val ok" id="b-rms">0.08</div></div>
+      </div>
+      <div class="accord">
+        <div class="accord-head" onclick="toggleAccord('bearing-body','bearing-arrow')">
+          <div class="accord-left">
+            <span class="sdot" style="background:var(--green)"></span>
+            <span class="ah-name">Bearing Diagnostics</span>
+            <span class="badge badge-ok">NORMAL</span>
+          </div>
+          <span class="accord-arrow" id="bearing-arrow">&#x25BE;</span>
+        </div>
+        <div class="accord-body" id="bearing-body">
+          <div class="prog-row"><span class="prog-name">Inner race</span><div class="prog-track"><div class="prog-fill" style="width:91%;background:var(--green)"></div></div><span class="prog-val">91%</span></div>
+          <div class="prog-row"><span class="prog-name">Outer race</span><div class="prog-track"><div class="prog-fill" style="width:87%;background:var(--green)"></div></div><span class="prog-val">87%</span></div>
+          <div class="prog-row"><span class="prog-name">Ball element</span><div class="prog-track"><div class="prog-fill" style="width:95%;background:var(--green)"></div></div><span class="prog-val">95%</span></div>
+          <div class="prog-row"><span class="prog-name">Cage wear</span><div class="prog-track"><div class="prog-fill" style="width:78%;background:var(--amber)"></div></div><span class="prog-val">78%</span></div>
+        </div>
+      </div>
+      <div class="cc-full">
+        <div class="cc-title">Vibration amplitude — realtime</div>
+        <div style="position:relative;width:100%;height:180px;">
+          <canvas id="bearingLine" role="img" aria-label="Bearing vibration over time"></canvas>
+        </div>
+      </div>
+    </div>
+
+    <!-- THERMAL -->
+    <div class="page" id="page-thermal">
+      <div class="metric-row">
+        <div class="mc warn"><div class="mc-label">Health</div><div class="mc-val warn" id="t-health">88%</div></div>
+        <div class="mc warn"><div class="mc-label">Core Temp</div><div class="mc-val warn" id="t-temp">73.0°C</div></div>
+        <div class="mc"><div class="mc-label">Ambient</div><div class="mc-val" id="t-amb">28.0°C</div></div>
+        <div class="mc warn"><div class="mc-label">ΔT rise</div><div class="mc-val warn" id="t-rise">+0.30°/min</div></div>
+      </div>
+      <div class="accord">
+        <div class="accord-head" onclick="toggleAccord('thermal-body','thermal-arrow')">
+          <div class="accord-left">
+            <span class="sdot" style="background:var(--amber)"></span>
+            <span class="ah-name">Thermal Diagnostics</span>
+            <span class="badge badge-warn">WARNING</span>
+          </div>
+          <span class="accord-arrow" id="thermal-arrow">&#x25BE;</span>
+        </div>
+        <div class="accord-body" id="thermal-body">
+          <div class="prog-row"><span class="prog-name">Stator winding</span><div class="prog-track"><div class="prog-fill" style="width:82%;background:var(--amber)"></div></div><span class="prog-val">82%</span></div>
+          <div class="prog-row"><span class="prog-name">Rotor core</span><div class="prog-track"><div class="prog-fill" style="width:88%;background:var(--green)"></div></div><span class="prog-val">88%</span></div>
+          <div class="prog-row"><span class="prog-name">Coolant flow</span><div class="prog-track"><div class="prog-fill" style="width:72%;background:var(--amber)"></div></div><span class="prog-val">72%</span></div>
+          <div class="prog-row"><span class="prog-name">Heat sink</span><div class="prog-track"><div class="prog-fill" style="width:91%;background:var(--green)"></div></div><span class="prog-val">91%</span></div>
+        </div>
+      </div>
+      <div class="cc-full">
+        <div class="cc-title">Core temperature — realtime</div>
+        <div style="position:relative;width:100%;height:180px;">
+          <canvas id="thermalLine" role="img" aria-label="Core temperature over time"></canvas>
+        </div>
+      </div>
+    </div>
+
+    <!-- ELECTRICAL -->
+    <div class="page" id="page-electrical">
+      <div class="metric-row">
+        <div class="mc ok"><div class="mc-label">Health</div><div class="mc-val ok" id="e-health">95%</div></div>
+        <div class="mc"><div class="mc-label">Voltage</div><div class="mc-val" id="e-volt">230 V</div></div>
+        <div class="mc"><div class="mc-label">Current</div><div class="mc-val" id="e-curr">14.2 A</div></div>
+        <div class="mc ok"><div class="mc-label">Power Factor</div><div class="mc-val ok" id="e-pf">0.96</div></div>
+      </div>
+      <div class="accord">
+        <div class="accord-head" onclick="toggleAccord('elec-body','elec-arrow')">
+          <div class="accord-left">
+            <span class="sdot" style="background:var(--green)"></span>
+            <span class="ah-name">Electrical Diagnostics</span>
+            <span class="badge badge-ok">NORMAL</span>
+          </div>
+          <span class="accord-arrow" id="elec-arrow">&#x25BE;</span>
+        </div>
+        <div class="accord-body" id="elec-body">
+          <div class="prog-row"><span class="prog-name">Phase A balance</span><div class="prog-track"><div class="prog-fill" style="width:97%;background:var(--green)"></div></div><span class="prog-val">97%</span></div>
+          <div class="prog-row"><span class="prog-name">Phase B balance</span><div class="prog-track"><div class="prog-fill" style="width:95%;background:var(--green)"></div></div><span class="prog-val">95%</span></div>
+          <div class="prog-row"><span class="prog-name">Phase C balance</span><div class="prog-track"><div class="prog-fill" style="width:93%;background:var(--green)"></div></div><span class="prog-val">93%</span></div>
+          <div class="prog-row"><span class="prog-name">Insulation</span><div class="prog-track"><div class="prog-fill" style="width:99%;background:var(--green)"></div></div><span class="prog-val">99%</span></div>
+        </div>
+      </div>
+      <div class="cc-full">
+        <div class="cc-title">Current draw — realtime</div>
+        <div style="position:relative;width:100%;height:180px;">
+          <canvas id="elecLine" role="img" aria-label="Electrical current over time"></canvas>
+        </div>
+      </div>
+    </div>
+
+    <!-- MECHANICAL -->
+    <div class="page" id="page-mechanical">
+      <div class="metric-row">
+        <div class="mc warn"><div class="mc-label">Health</div><div class="mc-val warn" id="m-health">87%</div></div>
+        <div class="mc"><div class="mc-label">RPM</div><div class="mc-val" id="m-rpm">1490</div></div>
+        <div class="mc"><div class="mc-label">Torque</div><div class="mc-val" id="m-torq">48.2 Nm</div></div>
+        <div class="mc warn"><div class="mc-label">Gear wear</div><div class="mc-val warn" id="m-gear">14%</div></div>
+      </div>
+      <div class="accord">
+        <div class="accord-head" onclick="toggleAccord('mech-body','mech-arrow')">
+          <div class="accord-left">
+            <span class="sdot" style="background:var(--amber)"></span>
+            <span class="ah-name">Mechanical Diagnostics</span>
+            <span class="badge badge-warn">WARNING</span>
+          </div>
+          <span class="accord-arrow" id="mech-arrow">&#x25BE;</span>
+        </div>
+        <div class="accord-body" id="mech-body">
+          <div class="prog-row"><span class="prog-name">Shaft alignment</span><div class="prog-track"><div class="prog-fill" style="width:89%;background:var(--green)"></div></div><span class="prog-val">89%</span></div>
+          <div class="prog-row"><span class="prog-name">Gear mesh</span><div class="prog-track"><div class="prog-fill" style="width:76%;background:var(--amber)"></div></div><span class="prog-val">76%</span></div>
+          <div class="prog-row"><span class="prog-name">Belt tension</span><div class="prog-track"><div class="prog-fill" style="width:83%;background:var(--green)"></div></div><span class="prog-val">83%</span></div>
+          <div class="prog-row"><span class="prog-name">Coupling</span><div class="prog-track"><div class="prog-fill" style="width:92%;background:var(--green)"></div></div><span class="prog-val">92%</span></div>
+        </div>
+      </div>
+      <div class="cc-full">
+        <div class="cc-title">RPM — realtime</div>
+        <div style="position:relative;width:100%;height:180px;">
+          <canvas id="mechLine" role="img" aria-label="RPM over time"></canvas>
+        </div>
+      </div>
+    </div>
+
+    <!-- EVENT LOG -->
+    <div class="page" id="page-log">
+      <div class="cc-full" style="margin-bottom:14px;">
+        <div class="cc-title">System event log</div>
+        <table class="log-table">
+          <thead>
+            <tr>
+              <th>Timestamp</th>
+              <th>Level</th>
+              <th>Subsystem</th>
+              <th>Message</th>
+            </tr>
+          </thead>
+          <tbody id="log-body">
+            <tr><td>12:04:11</td><td><span class="tag tag-warn">WARN</span></td><td>Thermal</td><td>Coolant flow below threshold (72%)</td></tr>
+            <tr><td>12:02:48</td><td><span class="tag tag-warn">WARN</span></td><td>Mechanical</td><td>Gear mesh degradation detected (76%)</td></tr>
+            <tr><td>11:58:32</td><td><span class="tag tag-info">INFO</span></td><td>System</td><td>Health check passed — overall 92%</td></tr>
+            <tr><td>11:54:17</td><td><span class="tag tag-info">INFO</span></td><td>Bearing</td><td>Vibration nominal — 1.40 mm/s</td></tr>
+            <tr><td>11:50:05</td><td><span class="tag tag-info">INFO</span></td><td>Electrical</td><td>Phase balance OK — all phases within 4%</td></tr>
+            <tr><td>11:44:59</td><td><span class="tag tag-info">INFO</span></td><td>System</td><td>Startup sequence complete</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="cc-full">
+        <div class="cc-title">Fault events — last 24h by type</div>
+        <div class="legend" id="fault-legend"></div>
+        <div style="position:relative;width:100%;height:180px;">
+          <canvas id="faultBar" role="img" aria-label="Fault frequency bar chart">Thermal: 3, Mechanical: 2, Bearing: 1, Electrical: 0</canvas>
+        </div>
+      </div>
+    </div>
+
+  </div><!-- /main -->
+</div><!-- /dashboard -->
+
+<script>
+/* ============ AUTH ============ */
+function doLogin() {
+  const u = document.getElementById('login-user').value.trim();
+  const p = document.getElementById('login-pass').value;
+  const err = document.getElementById('login-err');
+  if (u === 'admin' && p === '1234') {
+    err.textContent = '';
+    document.getElementById('login-page').style.display = 'none';
+    const dash = document.getElementById('dashboard-page');
+    dash.style.display = 'flex';
+    initDashboard();
+  } else {
+    err.textContent = '// Access denied — invalid credentials';
+    document.getElementById('login-pass').value = '';
+  }
+}
+document.getElementById('login-pass').addEventListener('keydown', e => { if(e.key==='Enter') doLogin(); });
+document.getElementById('login-user').addEventListener('keydown', e => { if(e.key==='Enter') doLogin(); });
+
+function doLogout() {
+  document.getElementById('dashboard-page').style.display = 'none';
+  document.getElementById('login-page').style.display = 'flex';
+  document.getElementById('login-user').value = '';
+  document.getElementById('login-pass').value = '';
+  clearInterval(clockTimer);
+  clearInterval(dataTimer);
+}
+
+/* ============ CLOCK ============ */
+let clockTimer;
+function startClock() {
+  function tick() {
+    const n = new Date();
+    document.getElementById('clock').textContent =
+      n.toTimeString().slice(0,8);
+  }
+  tick();
+  clockTimer = setInterval(tick, 1000);
+}
+
+/* ============ NAVIGATION ============ */
+function switchPage(id, btn) {
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('visible'));
+  document.querySelectorAll('.nav-tab').forEach(b => b.classList.remove('active'));
+  document.getElementById('page-' + id).classList.add('visible');
+  btn.classList.add('active');
+}
+
+function toggleAccord(bodyId, arrowId) {
+  const body = document.getElementById(bodyId);
+  const arrow = document.getElementById(arrowId);
+  const isOpen = body.classList.toggle('open');
+  arrow.classList.toggle('open', isOpen);
+}
+
+/* ============ CHART HELPERS ============ */
+const CHART_DEFAULTS = {
+  responsive: true,
+  maintainAspectRatio: false,
+  animation: false,
+  plugins: { legend: { display: false } }
+};
+
+function makeLineOpts(yLabel, min, max) {
+  return {
+    ...CHART_DEFAULTS,
+    scales: {
+      x: { ticks: { font:{size:9}, color:'#3d6e8f', maxTicksLimit:8 }, grid: { color:'rgba(56,189,248,0.06)' }, border:{color:'rgba(56,189,248,0.1)'} },
+      y: { min, max, ticks: { font:{size:9}, color:'#3d6e8f' }, grid: { color:'rgba(56,189,248,0.06)' }, border:{color:'rgba(56,189,248,0.1)'}, title: { display:!!yLabel, text:yLabel, color:'#3d6e8f', font:{size:9} } }
+    }
+  };
+}
+
+const N = 24;
+function mkLabels() { return Array.from({length:N},(_,i)=> i===N-1?'now':(N-1-i)+'s'); }
+
+function subHistory(base, noise) {
+  return Array.from({length:N}, () => base + (Math.random()-0.5)*noise*2);
+}
+
+/* ============ CHARTS ============ */
+const PIE_COLORS = ['#38bdf8','#fbbf24','#22d3a5','#a78bfa'];
+const PIE_LABELS = ['Bearing','Thermal','Electrical','Mechanical'];
+const PIE_DATA   = [91,88,95,87];
+
+let lineChart, bChart, tChart, eChart, mChart;
+const healthHist = subHistory(91, 2);
+
+function initCharts() {
+  /* PIE */
+  const pieLeg = document.getElementById('pie-legend');
+  pieLeg.innerHTML = PIE_LABELS.map((l,i)=>
+    `<span class="leg-item"><span class="leg-sq" style="background:${PIE_COLORS[i]}"></span>${l} ${PIE_DATA[i]}%</span>`
+  ).join('');
+  new Chart(document.getElementById('pieChart'), {
+    type: 'doughnut',
+    data: { labels: PIE_LABELS, datasets: [{ data: PIE_DATA, backgroundColor: PIE_COLORS, borderWidth: 0, spacing: 4 }] },
+    options: { ...CHART_DEFAULTS, cutout: '65%' }
+  });
+
+  /* LINE */
+  lineChart = new Chart(document.getElementById('lineChart'), {
+    type: 'line',
+    data: { labels: mkLabels(), datasets: [{ data:[...healthHist], borderColor:'#22d3a5', backgroundColor:'rgba(34,211,165,0.08)', borderWidth:1.5, pointRadius:0, tension:0.45, fill:true }] },
+    options: makeLineOpts('%', 80, 100)
+  });
+
+  /* BAR */
+  new Chart(document.getElementById('barChart'), {
+    type: 'bar',
+    data: { labels: PIE_LABELS, datasets: [{ data: PIE_DATA, backgroundColor: PIE_COLORS, borderWidth:0, borderRadius:3 }] },
+    options: { ...makeLineOpts('', 70, 100), scales: { x: { ticks:{font:{size:10},color:'#7ea8c9'}, grid:{display:false}, border:{color:'rgba(56,189,248,0.1)'} }, y: { min:70, max:100, ticks:{font:{size:9},color:'#3d6e8f'}, grid:{color:'rgba(56,189,248,0.06)'}, border:{color:'rgba(56,189,248,0.1)'} } } }
+  });
+
+  /* SUB CHARTS */
+  bChart = makeSubChart('bearingLine', '#38bdf8', subHistory(1.4,0.3), 'mm/s', 0.8, 2.2);
+  tChart = makeSubChart('thermalLine', '#fbbf24', subHistory(73,1),    '°C',  69, 78);
+  eChart = makeSubChart('elecLine',    '#22d3a5', subHistory(14.2,0.4),'A',   12, 16);
+  mChart = makeSubChart('mechLine',    '#a78bfa', subHistory(1490,12), 'RPM', 1450, 1530);
+
+  /* FAULT BAR */
+  const fColors = ['#fbbf24','#a78bfa','#38bdf8','#22d3a5'];
+  const fLabels = ['Thermal','Mechanical','Bearing','Electrical'];
+  const fData   = [3,2,1,0];
+  const fLeg = document.getElementById('fault-legend');
+  fLeg.innerHTML = fLabels.map((l,i)=>
+    `<span class="leg-item"><span class="leg-sq" style="background:${fColors[i]}"></span>${l} ${fData[i]}</span>`
+  ).join('');
+  new Chart(document.getElementById('faultBar'), {
+    type: 'bar',
+    data: { labels: fLabels, datasets: [{ data: fData, backgroundColor: fColors, borderWidth:0, borderRadius:3 }] },
+    options: { ...CHART_DEFAULTS, scales: { x:{ticks:{font:{size:11},color:'#7ea8c9'},grid:{display:false},border:{color:'rgba(56,189,248,0.1)'}}, y:{min:0,max:5,ticks:{font:{size:9},color:'#3d6e8f',stepSize:1},grid:{color:'rgba(56,189,248,0.06)'},border:{color:'rgba(56,189,248,0.1)'}} } }
+  });
+}
+
+function makeSubChart(id, color, hist, yLabel, yMin, yMax) {
+  return new Chart(document.getElementById(id), {
+    type: 'line',
+    data: { labels: mkLabels(), datasets: [{ data:[...hist], borderColor:color, backgroundColor:color+'18', borderWidth:1.5, pointRadius:0, tension:0.45, fill:true }] },
+    options: makeLineOpts(yLabel, yMin, yMax)
+  });
+}
+
+/* ============ LIVE DATA FROM ESP32 ============ */
+let dataTimer;
+
+/*
+  Expected JSON from ESP32 /data endpoint:
+  {
+    "health":    92.0,       // overall health %
+    "mse":       0.031,      // model MSE
+    "confidence":97.4,       // model confidence %
+    "rul":       88,         // remaining useful life %
+    "fault":     false,      // true if any fault active
+    "bearing":   false,      // bearing fault flag
+    "thermal":   true,       // thermal fault flag
+    "electrical":false,      // electrical fault flag
+    "mechanical":true,       // mechanical fault flag
+    "vibration": 1.40,       // mm/s
+    "temperature":73.0,      // °C core temp
+    "current":   14.2,       // Amps
+    "rpm":       1490        // shaft RPM
+  }
+*/
+
+function applyData(d) {
+  /* ---- OVERVIEW ---- */
+  const h = parseFloat(d.health) || 0;
+  healthHist.push(h);
+  healthHist.shift();
+  lineChart.data.datasets[0].data = [...healthHist];
+  lineChart.update('none');
+
+  document.getElementById('ov-health').textContent = h.toFixed(1) + '%';
+  document.getElementById('ov-mse').textContent    = parseFloat(d.mse).toFixed(3);
+  document.getElementById('ov-conf').textContent   = parseFloat(d.confidence).toFixed(1) + '%';
+  document.getElementById('ov-rul').textContent    = parseFloat(d.rul).toFixed(0) + '%';
+
+  const statusEl = document.getElementById('ov-status');
+  const warns = [d.bearing, d.thermal, d.electrical, d.mechanical].filter(Boolean).length;
+  document.getElementById('ov-warns').textContent = warns;
+  if (d.fault) {
+    statusEl.textContent = 'FAULT';
+    statusEl.className = 'mc-val fault';
+  } else if (warns > 0) {
+    statusEl.textContent = 'WARNING';
+    statusEl.className = 'mc-val warn';
+  } else {
+    statusEl.textContent = 'HEALTHY';
+    statusEl.className = 'mc-val ok';
+  }
+
+  /* ---- BEARING ---- */
+  const vib = parseFloat(d.vibration) || 0;
+  push(bChart, vib);
+  document.getElementById('b-vib').textContent = vib.toFixed(2) + ' mm/s';
+
+  /* ---- THERMAL ---- */
+  const temp = parseFloat(d.temperature) || 0;
+  push(tChart, temp);
+  document.getElementById('t-temp').textContent = temp.toFixed(1) + '°C';
+
+  /* ---- ELECTRICAL ---- */
+  const curr = parseFloat(d.current) || 0;
+  push(eChart, curr);
+  document.getElementById('e-curr').textContent = curr.toFixed(1) + ' A';
+
+  /* ---- MECHANICAL ---- */
+  const rpm = parseInt(d.rpm) || 0;
+  push(mChart, rpm);
+  document.getElementById('m-rpm').textContent = rpm;
+
+  /* ---- STATUS BADGES & TOPBAR LIVE DOT ---- */
+  document.querySelector('.live-dot').style.background = d.fault ? '#f87171' : '#22d3a5';
+}
+
+function refreshData() {
+  fetch('/data')
+    .then(r => {
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      return r.json();
+    })
+    .then(d => {
+      if (d.error) {
+        console.warn('ESP32 returned error:', d.error);
+        return;
+      }
+      applyData(d);
+    })
+    .catch(err => {
+      console.warn('ESP32 offline or fetch failed:', err.message);
+      document.getElementById('ov-status').textContent = 'OFFLINE';
+      document.getElementById('ov-status').className = 'mc-val fault';
+      document.querySelector('.live-dot').style.background = '#f87171';
+    });
+}
+
+function push(chart, val) {
+  chart.data.datasets[0].data.push(parseFloat(val.toFixed(3)));
+  chart.data.datasets[0].data.shift();
+  chart.update('none');
+}
+
+/* ============ INIT ============ */
+function initDashboard() {
+  startClock();
+  initCharts();
+  dataTimer = setInterval(refreshData, 1500);
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,95 @@
+#include <WiFi.h>
+#include <WebServer.h>
+#include <ArduinoJson.h>
+
+const char* ssid = "nidhi";
+const char* password = "12345678";
+
+WebServer server(80);
+StaticJsonDocument<2048> latestData;   // ✅ Increased size
+
+unsigned long lastJsonTime = 0;        // ✅ Watchdog timer
+
+/* =========================
+   READ STM32 JSON (ROBUST)
+   ========================= */
+void readSTM32()
+{
+  if (Serial2.available())
+  {
+    String line = Serial2.readStringUntil('\n');
+    line.trim();
+
+    if (line.startsWith("{"))
+    {
+      DeserializationError error = deserializeJson(latestData, line);
+
+      if (!error)
+      {
+        Serial.println("✅ Data Updated");
+        lastJsonTime = millis();
+      }
+      else
+      {
+        Serial.println("❌ JSON Error: " + line);
+      }
+    }
+  }
+}
+
+/* =========================
+   HTTP HANDLER
+   ========================= */
+void handleData()
+{
+  String response;
+  serializeJson(latestData, response);
+
+  server.sendHeader("Access-Control-Allow-Origin", "*");
+  server.send(200, "application/json", response);
+}
+
+/* =========================
+   SETUP
+   ========================= */
+void setup()
+{
+  Serial.begin(115200);
+  Serial2.begin(115200);
+  Serial2.setTimeout(50);
+
+  Serial.println("Connecting to WiFi...");
+
+  WiFi.begin(ssid, password);
+
+  while (WiFi.status() != WL_CONNECTED)
+  {
+    delay(500);
+    Serial.print(".");
+  }
+
+  Serial.println("\n✅ Connected!");
+  Serial.print("IP Address: ");
+  Serial.println(WiFi.localIP());
+
+  server.on("/data", handleData);
+  server.begin();
+
+  Serial.println("🌐 Server started");
+}
+
+/* =========================
+   LOOP
+   ========================= */
+void loop()
+{
+  readSTM32();
+  server.handleClient();
+
+  // 🚨 JSON timeout watchdog
+  if (millis() - lastJsonTime > 3000)   // 3 sec timeout
+  {
+    Serial.println("⚠️ JSON NOT RECEIVED");
+    lastJsonTime = millis();  // prevent spam
+  }
+}
