@@ -1,0 +1,5 @@
+../Core/Src/ADXL345.c:8:13:ADXL_Write	1
+../Core/Src/ADXL345.c:19:13:ADXL_Read	1
+../Core/Src/ADXL345.c:32:13:ADXL345_Init	2
+../Core/Src/ADXL345.c:59:6:ADXL_SetRange	1
+../Core/Src/ADXL345.c:67:6:ADXL345_ReadXYZ	1
